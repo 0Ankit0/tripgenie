@@ -5,11 +5,13 @@ import '../widgets/place_card.dart';
 class SavedScreen extends StatelessWidget {
   final List<Place> bookmarks;
   final void Function(Place place) onToggleBookmark;
+  final void Function(Place place) onAddToTrip;
 
   const SavedScreen({
     super.key,
     required this.bookmarks,
     required this.onToggleBookmark,
+    required this.onAddToTrip,
   });
 
   @override
@@ -101,6 +103,7 @@ class SavedScreen extends StatelessWidget {
                       place: place,
                       isBookmarked: true,
                       onToggleBookmark: () => onToggleBookmark(place),
+                      onAddToTrip: () => onAddToTrip(place),
                     );
                   },
                 ),

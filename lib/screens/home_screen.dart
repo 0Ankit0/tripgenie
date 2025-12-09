@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../models/place.dart';
-import '../models/expense.dart';
+import '../models/trip.dart';
 import '../services/gemini_service.dart';
 import '../services/storage_service.dart';
 import 'planner_screen.dart';
+import 'trips_screen.dart';
 import 'saved_screen.dart';
-import 'expenses_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final StorageService storageService;
@@ -28,8 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   late GeminiService _geminiService;
   late List<Place> _bookmarks;
-  late List<Expense> _expenses;
-  String? _currentDestination;
+  late List<Trip> _trips;
 
   static const _uuid = Uuid();
 
@@ -38,7 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _geminiService = GeminiService(widget.apiKey);
     _bookmarks = widget.storageService.getBookmarks();
-    _expenses = widget.storageService.getExpenses();
+    _trips = widget.storageService.getTrips();
   }
 
   Set<String> get _bookmarkedIds => _bookmarks.map((p) => p.id).toSet();
@@ -56,25 +55,121 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _addExpense(String description, double amount, ExpenseCategory category) {
-    final expense = Expense(
-      id: _uuid.v4(),
-      description: description,
-      amount: amount,
-      category: category,
-      date: DateTime.now(),
-    );
+  // Trip Management
+  void _createTrip(Trip trip) {
     setState(() {
-      _expenses.insert(0, expense);
+      _trips.insert(0, trip);
     });
-    widget.storageService.addExpense(expense);
+    widget.storageService.addTrip(trip);
   }
 
-  void _deleteExpense(String id) {
+  void _updateTrip(Trip trip) {
     setState(() {
-      _expenses.removeWhere((e) => e.id == id);
+      final index = _trips.indexWhere((t) => t.id == trip.id);
+      if (index >= 0) {
+        _trips[index] = trip;
+      }
     });
-    widget.storageService.removeExpense(id);
+    widget.storageService.updateTrip(trip);
+  }
+
+  void _deleteTrip(String tripId) {
+    setState(() {
+      _trips.removeWhere((t) => t.id == tripId);
+    });
+    widget.storageService.deleteTrip(tripId);
+  }
+
+  void _addPlaceToTrip(Place place) {
+    if (_trips.isEmpty) {
+      // Auto-create a new trip
+      final newTrip = Trip(
+        id: _uuid.v4(),
+        name: place.searchQuery.isNotEmpty ? place.searchQuery : 'My New Trip',
+        destination: place.searchQuery.isNotEmpty ? place.searchQuery : 'Unknown',
+        places: [place],
+        expenses: [],
+      );
+      _createTrip(newTrip);
+      _showSnackBar('Created new trip "${newTrip.name}" and added ${place.name}!');
+    } else if (_trips.length == 1) {
+      // Add to the only trip
+      final trip = _trips[0];
+      if (trip.places.any((p) => p.id == place.id)) {
+        _showSnackBar('${place.name} is already in ${trip.name}.');
+        return;
+      }
+      final updatedTrip = trip.copyWith(
+        places: [...trip.places, place],
+      );
+      _updateTrip(updatedTrip);
+      _showSnackBar('Added ${place.name} to ${trip.name}.');
+    } else {
+      // Show trip selection dialog
+      _showTripSelectionDialog(place);
+    }
+  }
+
+  void _showTripSelectionDialog(Place place) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add to Trip'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Which trip do you want to add ${place.name} to?',
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 16),
+            ...(_trips.map((trip) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.teal.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(Icons.work_outline, color: Colors.teal.shade600),
+                  ),
+                  title: Text(trip.name),
+                  subtitle: Text(trip.destination),
+                  trailing: const Icon(Icons.add),
+                  onTap: () {
+                    Navigator.pop(context);
+                    if (trip.places.any((p) => p.id == place.id)) {
+                      _showSnackBar('${place.name} is already in ${trip.name}.');
+                      return;
+                    }
+                    final updatedTrip = trip.copyWith(
+                      places: [...trip.places, place],
+                    );
+                    _updateTrip(updatedTrip);
+                    _showSnackBar('Added ${place.name} to ${trip.name}.');
+                  },
+                ))),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   void _showSettingsDialog() {
@@ -182,16 +277,18 @@ class _HomeScreenState extends State<HomeScreen> {
             geminiService: _geminiService,
             bookmarkedIds: _bookmarkedIds,
             onToggleBookmark: _toggleBookmark,
+            onAddToTrip: _addPlaceToTrip,
+          ),
+          TripsScreen(
+            trips: _trips,
+            onCreateTrip: _createTrip,
+            onUpdateTrip: _updateTrip,
+            onDeleteTrip: _deleteTrip,
           ),
           SavedScreen(
             bookmarks: _bookmarks,
             onToggleBookmark: _toggleBookmark,
-          ),
-          ExpensesScreen(
-            expenses: _expenses,
-            onAddExpense: _addExpense,
-            onDeleteExpense: _deleteExpense,
-            currentDestination: _currentDestination,
+            onAddToTrip: _addPlaceToTrip,
           ),
         ],
       ),
@@ -219,6 +316,61 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icon(Icons.map_outlined),
               activeIcon: Icon(Icons.map),
               label: 'Planner',
+            ),
+            BottomNavigationBarItem(
+              icon: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Icon(Icons.work_outline),
+                  if (_trips.isNotEmpty)
+                    Positioned(
+                      right: -8,
+                      top: -4,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.teal.shade600,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          '${_trips.length}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              activeIcon: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Icon(Icons.work),
+                  if (_trips.isNotEmpty)
+                    Positioned(
+                      right: -8,
+                      top: -4,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.teal.shade600,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          '${_trips.length}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              label: 'Trips',
             ),
             BottomNavigationBarItem(
               icon: Stack(
@@ -274,11 +426,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
               label: 'Saved',
-            ),
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.credit_card_outlined),
-              activeIcon: Icon(Icons.credit_card),
-              label: 'Expenses',
             ),
           ],
         ),

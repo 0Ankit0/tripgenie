@@ -2,11 +2,13 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/place.dart';
 import '../models/expense.dart';
+import '../models/trip.dart';
 
 class StorageService {
   static const String _apiKeyKey = 'gemini_api_key';
   static const String _bookmarksKey = 'bookmarks';
   static const String _expensesKey = 'expenses';
+  static const String _tripsKey = 'trips';
 
   final SharedPreferences _prefs;
 
@@ -17,15 +19,25 @@ class StorageService {
     return StorageService(prefs);
   }
 
-  // API Key
-  String? getApiKey() => _prefs.getString(_apiKeyKey);
+  // API Key - Enhanced with proper trimming and validation
+  String? getApiKey() {
+    final key = _prefs.getString(_apiKeyKey);
+    if (key == null || key.trim().isEmpty) return null;
+    return key.trim();
+  }
 
-  Future<bool> setApiKey(String key) => _prefs.setString(_apiKeyKey, key);
+  Future<bool> setApiKey(String key) {
+    final trimmedKey = key.trim();
+    if (trimmedKey.isEmpty) return Future.value(false);
+    return _prefs.setString(_apiKeyKey, trimmedKey);
+  }
 
   Future<bool> clearApiKey() => _prefs.remove(_apiKeyKey);
 
-  bool hasApiKey() => _prefs.containsKey(_apiKeyKey) && 
-                       (_prefs.getString(_apiKeyKey)?.isNotEmpty ?? false);
+  bool hasApiKey() {
+    final key = _prefs.getString(_apiKeyKey);
+    return key != null && key.trim().isNotEmpty;
+  }
 
   // Bookmarks
   List<Place> getBookmarks() {
@@ -84,5 +96,41 @@ class StorageService {
     final expenses = getExpenses();
     expenses.removeWhere((e) => e.id == expenseId);
     return saveExpenses(expenses);
+  }
+
+  // Trips
+  List<Trip> getTrips() {
+    final jsonStr = _prefs.getString(_tripsKey);
+    if (jsonStr == null || jsonStr.isEmpty) return [];
+    
+    final List<dynamic> jsonList = jsonDecode(jsonStr);
+    return jsonList.map((j) => Trip.fromJson(j as Map<String, dynamic>)).toList();
+  }
+
+  Future<bool> saveTrips(List<Trip> trips) {
+    final jsonStr = jsonEncode(trips.map((t) => t.toJson()).toList());
+    return _prefs.setString(_tripsKey, jsonStr);
+  }
+
+  Future<bool> addTrip(Trip trip) async {
+    final trips = getTrips();
+    trips.insert(0, trip);
+    return saveTrips(trips);
+  }
+
+  Future<bool> updateTrip(Trip trip) async {
+    final trips = getTrips();
+    final index = trips.indexWhere((t) => t.id == trip.id);
+    if (index >= 0) {
+      trips[index] = trip;
+      return saveTrips(trips);
+    }
+    return false;
+  }
+
+  Future<bool> deleteTrip(String tripId) async {
+    final trips = getTrips();
+    trips.removeWhere((t) => t.id == tripId);
+    return saveTrips(trips);
   }
 }

@@ -8,9 +8,13 @@ class GeminiService {
   static const _uuid = Uuid();
 
   GeminiService(this.apiKey) {
+    final trimmedKey = apiKey.trim();
+    if (trimmedKey.isEmpty) {
+      throw ArgumentError('API key cannot be empty');
+    }
     _model = GenerativeModel(
-      model: 'gemini-2.0-flash',
-      apiKey: apiKey,
+      model: 'gemini-2.5-flash',
+      apiKey: trimmedKey,
     );
   }
 

@@ -7,12 +7,14 @@ class PlannerScreen extends StatefulWidget {
   final GeminiService geminiService;
   final Set<String> bookmarkedIds;
   final void Function(Place place) onToggleBookmark;
+  final void Function(Place place) onAddToTrip;
 
   const PlannerScreen({
     super.key,
     required this.geminiService,
     required this.bookmarkedIds,
     required this.onToggleBookmark,
+    required this.onAddToTrip,
   });
 
   @override
@@ -322,6 +324,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
                         place: place,
                         isBookmarked: widget.bookmarkedIds.contains(place.id),
                         onToggleBookmark: () => widget.onToggleBookmark(place),
+                        onAddToTrip: () => widget.onAddToTrip(place),
                       );
                     },
                   ),

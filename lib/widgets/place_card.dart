@@ -6,12 +6,14 @@ class PlaceCard extends StatefulWidget {
   final Place place;
   final bool isBookmarked;
   final VoidCallback onToggleBookmark;
+  final VoidCallback? onAddToTrip;
 
   const PlaceCard({
     super.key,
     required this.place,
     required this.isBookmarked,
     required this.onToggleBookmark,
+    this.onAddToTrip,
   });
 
   @override
@@ -154,25 +156,47 @@ class _PlaceCardState extends State<PlaceCard> {
               Positioned(
                 top: 12,
                 right: 12,
-                child: Material(
-                  color: Colors.white.withValues(alpha: 0.9),
-                  borderRadius: BorderRadius.circular(24),
-                  child: InkWell(
-                    onTap: widget.onToggleBookmark,
-                    borderRadius: BorderRadius.circular(24),
-                    child: Padding(
-                      padding: const EdgeInsets.all(10),
-                      child: Icon(
-                        widget.isBookmarked
-                            ? Icons.bookmark
-                            : Icons.bookmark_border,
-                        size: 22,
-                        color: widget.isBookmarked
-                            ? Colors.amber.shade600
-                            : Colors.grey.shade600,
+                child: Row(
+                  children: [
+                    if (widget.onAddToTrip != null)
+                      Material(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(24),
+                        child: InkWell(
+                          onTap: widget.onAddToTrip,
+                          borderRadius: BorderRadius.circular(24),
+                          child: Padding(
+                            padding: const EdgeInsets.all(10),
+                            child: Icon(
+                              Icons.add_location_alt,
+                              size: 22,
+                              color: Colors.teal.shade600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    const SizedBox(width: 8),
+                    Material(
+                      color: Colors.white.withValues(alpha: 0.9),
+                      borderRadius: BorderRadius.circular(24),
+                      child: InkWell(
+                        onTap: widget.onToggleBookmark,
+                        borderRadius: BorderRadius.circular(24),
+                        child: Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: Icon(
+                            widget.isBookmarked
+                                ? Icons.bookmark
+                                : Icons.bookmark_border,
+                            size: 22,
+                            color: widget.isBookmarked
+                                ? Colors.amber.shade600
+                                : Colors.grey.shade600,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ],
