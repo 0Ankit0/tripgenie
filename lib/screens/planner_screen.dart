@@ -67,7 +67,8 @@ class _PlannerScreenState extends State<PlannerScreen> {
       });
     } catch (e) {
       setState(() {
-        _error = 'Failed to fetch places. Please check your API key and try again.';
+        _error =
+            'Failed to fetch places. Please check your API key and try again.';
         _isLoading = false;
       });
     }
@@ -119,27 +120,27 @@ class _PlannerScreenState extends State<PlannerScreen> {
                 ),
                 // Content
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 48, 24, 40),
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
                   child: Column(
                     children: [
                       const Text(
                         'Where to next?',
                         style: TextStyle(
-                          fontSize: 32,
+                          fontSize: 22,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 4),
                       Text(
                         'Enter a destination and let our AI plan your perfect itinerary.',
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: 13,
                           color: Colors.white.withValues(alpha: 0.9),
                         ),
                         textAlign: TextAlign.center,
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 12),
 
                       // Search field
                       Container(
@@ -179,13 +180,14 @@ class _PlannerScreenState extends State<PlannerScreen> {
                                   _searchController.text = value;
                                   _search();
                                 },
-                                fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
+                                fieldViewBuilder: (context, controller,
+                                    focusNode, onSubmitted) {
                                   // Sync controllers
                                   controller.text = _searchController.text;
                                   controller.addListener(() {
                                     _searchController.text = controller.text;
                                   });
-                                  
+
                                   return TextField(
                                     controller: controller,
                                     focusNode: focusNode,
@@ -229,7 +231,8 @@ class _PlannerScreenState extends State<PlannerScreen> {
                                       )
                                     : const Text(
                                         'Explore',
-                                        style: TextStyle(fontWeight: FontWeight.w600),
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.w600),
                                       ),
                               ),
                             ),
@@ -312,20 +315,58 @@ class _PlannerScreenState extends State<PlannerScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final crossAxisCount = constraints.maxWidth > 900
+                          ? 3
+                          : constraints.maxWidth > 600
+                              ? 2
+                              : 1;
 
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: _places!.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 16),
-                    itemBuilder: (context, index) {
-                      final place = _places![index];
-                      return PlaceCard(
-                        place: place,
-                        isBookmarked: widget.bookmarkedIds.contains(place.id),
-                        onToggleBookmark: () => widget.onToggleBookmark(place),
-                        onAddToTrip: () => widget.onAddToTrip(place),
-                      );
+                      if (crossAxisCount == 1) {
+                        return ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _places!.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 16),
+                          itemBuilder: (context, index) {
+                            final place = _places![index];
+                            return PlaceCard(
+                              place: place,
+                              isBookmarked:
+                                  widget.bookmarkedIds.contains(place.id),
+                              onToggleBookmark: () =>
+                                  widget.onToggleBookmark(place),
+                              onAddToTrip: () => widget.onAddToTrip(place),
+                            );
+                          },
+                        );
+                      } else {
+                        return GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: crossAxisCount,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                            childAspectRatio: 0.7,
+                          ),
+                          itemCount: _places!.length,
+                          itemBuilder: (context, index) {
+                            final place = _places![index];
+                            return PlaceCard(
+                              place: place,
+                              isBookmarked:
+                                  widget.bookmarkedIds.contains(place.id),
+                              onToggleBookmark: () =>
+                                  widget.onToggleBookmark(place),
+                              onAddToTrip: () => widget.onAddToTrip(place),
+                            );
+                          },
+                        );
+                      }
                     },
                   ),
                 ],

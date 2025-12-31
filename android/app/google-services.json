@@ -1,0 +1,62 @@
+{
+  "project_info": {
+    "project_number": "437506124492",
+    "project_id": "tripgenie153",
+    "storage_bucket": "tripgenie153.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:437506124492:android:44f9a1f77ebb0fdf177069",
+        "android_client_info": {
+          "package_name": "com.zenith.tripgenie"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "437506124492-4h8vju7278iup3g94iv276887otfljhh.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.zenith.tripgenie",
+            "certificate_hash": "e2d558a7a402538ed7bd6819ddcfe42d50e9604a"
+          }
+        },
+        {
+          "client_id": "437506124492-hq483kdejvs4qkjem9ptltv157fkm5n0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.zenith.tripgenie",
+            "certificate_hash": "83010fd8b1194bd2f7d4128cb9489c6e5945106b"
+          }
+        },
+        {
+          "client_id": "437506124492-4749tp3nb3d7mdo7c5op0lic86keokuh.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD44VJLsvK8cn1uZlOK1eXv6gjnOWEKb1I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "437506124492-4749tp3nb3d7mdo7c5op0lic86keokuh.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "437506124492-4uiiav3kii4cvh325l73cfi1n89kn6cd.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.zenith.tripgenie"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

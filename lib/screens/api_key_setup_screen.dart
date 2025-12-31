@@ -1,3 +1,4 @@
+import '../services/auth_service.dart';
 import 'package:flutter/material.dart';
 
 class ApiKeySetupScreen extends StatefulWidget {
@@ -18,6 +19,39 @@ class _ApiKeySetupScreenState extends State<ApiKeySetupScreen> {
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final credential = await AuthService().signInWithGoogle();
+      if (credential != null && credential.user != null) {
+        // Successfully signed in, now fetch the API key
+        final apiKey = await AuthService().getApiKeyForUser(credential.user!);
+
+        if (apiKey != null) {
+          widget.onApiKeySaved(apiKey);
+        } else {
+          setState(() {
+            _error = 'Could not retrieve API key for this account.';
+          });
+        }
+      } else {
+        // User cancelled or failed without exception
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _error = 'Sign in failed: $e';
+        _isLoading = false;
+      });
+    }
   }
 
   void _saveApiKey() {
@@ -182,6 +216,55 @@ class _ApiKeySetupScreenState extends State<ApiKeySetupScreen> {
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Divider
+                        Row(
+                          children: [
+                            Expanded(
+                                child: Divider(color: Colors.grey.shade300)),
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 16),
+                              child: Text(
+                                'OR',
+                                style: TextStyle(
+                                  color: Colors.grey.shade500,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                                child: Divider(color: Colors.grey.shade300)),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Google Sign In Button
+                        OutlinedButton.icon(
+                          onPressed: _isLoading ? null : _handleGoogleSignIn,
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            side: BorderSide(color: Colors.grey.shade300),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          icon: Image.asset(
+                            'assets/google_logo.png', // Assuming you might have one, otherwise I'll use an Icon for now
+                            height: 24,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(Icons.login, color: Colors.blue),
+                          ),
+                          label: const Text(
+                            'Continue with Google',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black87,
+                            ),
+                          ),
                         ),
                       ],
                     ),

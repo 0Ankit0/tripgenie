@@ -93,18 +93,50 @@ class SavedScreen extends StatelessWidget {
                     ],
                   ),
                 )
-              : ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: bookmarks.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 16),
-                  itemBuilder: (context, index) {
-                    final place = bookmarks[index];
-                    return PlaceCard(
-                      place: place,
-                      isBookmarked: true,
-                      onToggleBookmark: () => onToggleBookmark(place),
-                      onAddToTrip: () => onAddToTrip(place),
-                    );
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    final crossAxisCount = constraints.maxWidth > 900
+                        ? 3
+                        : constraints.maxWidth > 600
+                            ? 2
+                            : 1;
+
+                    if (crossAxisCount == 1) {
+                      return ListView.separated(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: bookmarks.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 16),
+                        itemBuilder: (context, index) {
+                          final place = bookmarks[index];
+                          return PlaceCard(
+                            place: place,
+                            isBookmarked: true,
+                            onToggleBookmark: () => onToggleBookmark(place),
+                            onAddToTrip: () => onAddToTrip(place),
+                          );
+                        },
+                      );
+                    } else {
+                      return GridView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: crossAxisCount,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
+                          childAspectRatio: 0.7,
+                        ),
+                        itemCount: bookmarks.length,
+                        itemBuilder: (context, index) {
+                          final place = bookmarks[index];
+                          return PlaceCard(
+                            place: place,
+                            isBookmarked: true,
+                            onToggleBookmark: () => onToggleBookmark(place),
+                            onAddToTrip: () => onAddToTrip(place),
+                          );
+                        },
+                      );
+                    }
                   },
                 ),
         ),

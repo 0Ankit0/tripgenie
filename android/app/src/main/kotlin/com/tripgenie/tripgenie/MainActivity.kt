@@ -1,4 +1,4 @@
-package com.tripgenie.tripgenie
+package com.zenith.tripgenie
 
 import io.flutter.embedding.android.FlutterActivity
 

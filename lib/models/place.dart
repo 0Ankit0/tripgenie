@@ -6,7 +6,7 @@ class Place {
   final double? longitude;
   final String searchQuery;
   final String? sourceUri;
-  final String? imageUrl;
+  String? imageUrl;
   final String? openingHours;
   final String? website;
   final List<String>? reviews;

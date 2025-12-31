@@ -1,0 +1,5 @@
+Analyzing tripgenie...                                          
+
+   info - Don't invoke 'print' in production code - lib\services\auth_service.dart:39:7 - avoid_print
+
+1 issue found. (ran in 1.6s)

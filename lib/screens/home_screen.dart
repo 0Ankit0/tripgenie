@@ -86,12 +86,14 @@ class _HomeScreenState extends State<HomeScreen> {
       final newTrip = Trip(
         id: _uuid.v4(),
         name: place.searchQuery.isNotEmpty ? place.searchQuery : 'My New Trip',
-        destination: place.searchQuery.isNotEmpty ? place.searchQuery : 'Unknown',
+        destination:
+            place.searchQuery.isNotEmpty ? place.searchQuery : 'Unknown',
         places: [place],
         expenses: [],
       );
       _createTrip(newTrip);
-      _showSnackBar('Created new trip "${newTrip.name}" and added ${place.name}!');
+      _showSnackBar(
+          'Created new trip "${newTrip.name}" and added ${place.name}!');
     } else if (_trips.length == 1) {
       // Add to the only trip
       final trip = _trips[0];
@@ -132,7 +134,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: Colors.teal.shade100,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(Icons.work_outline, color: Colors.teal.shade600),
+                    child:
+                        Icon(Icons.work_outline, color: Colors.teal.shade600),
                   ),
                   title: Text(trip.name),
                   subtitle: Text(trip.destination),
@@ -140,7 +143,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   onTap: () {
                     Navigator.pop(context);
                     if (trip.places.any((p) => p.id == place.id)) {
-                      _showSnackBar('${place.name} is already in ${trip.name}.');
+                      _showSnackBar(
+                          '${place.name} is already in ${trip.name}.');
                       return;
                     }
                     final updatedTrip = trip.copyWith(
@@ -281,6 +285,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           TripsScreen(
             trips: _trips,
+            bookmarks: _bookmarks,
             onCreateTrip: _createTrip,
             onUpdateTrip: _updateTrip,
             onDeleteTrip: _deleteTrip,

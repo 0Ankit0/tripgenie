@@ -7,6 +7,7 @@ import '../widgets/expense_form.dart';
 
 class TripsScreen extends StatefulWidget {
   final List<Trip> trips;
+  final List<Place> bookmarks;
   final void Function(Trip trip) onCreateTrip;
   final void Function(Trip trip) onUpdateTrip;
   final void Function(String tripId) onDeleteTrip;
@@ -14,6 +15,7 @@ class TripsScreen extends StatefulWidget {
   const TripsScreen({
     super.key,
     required this.trips,
+    required this.bookmarks,
     required this.onCreateTrip,
     required this.onUpdateTrip,
     required this.onDeleteTrip,
@@ -68,7 +70,8 @@ class _TripsScreenState extends State<TripsScreen> {
     widget.onUpdateTrip(updatedTrip);
   }
 
-  void _addExpense(String description, double amount, ExpenseCategory category) {
+  void _addExpense(
+      String description, double amount, ExpenseCategory category) {
     if (_activeTrip == null) return;
     final expense = Expense(
       id: _uuid.v4(),
@@ -91,6 +94,74 @@ class _TripsScreenState extends State<TripsScreen> {
     widget.onUpdateTrip(updatedTrip);
   }
 
+  void _showSelectSavedPlaceDialog(Trip trip) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add from Saved'),
+        content: widget.bookmarks.isEmpty
+            ? const Text('No saved places found.')
+            : SizedBox(
+                width: double.maxFinite,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: widget.bookmarks.length,
+                  itemBuilder: (context, index) {
+                    final place = widget.bookmarks[index];
+                    final isAlreadyAdded =
+                        trip.places.any((p) => p.id == place.id);
+
+                    return ListTile(
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: Image.network(
+                          place.imageUrl ?? place.placeholderImageUrl,
+                          width: 40,
+                          height: 40,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      title: Text(place.name),
+                      subtitle: Text(
+                        isAlreadyAdded ? 'Already added' : place.searchQuery,
+                        style: TextStyle(
+                            color: isAlreadyAdded ? Colors.orange : null),
+                      ),
+                      trailing: Icon(
+                        isAlreadyAdded
+                            ? Icons.check_circle
+                            : Icons.add_circle_outline,
+                        color: isAlreadyAdded ? Colors.green : Colors.teal,
+                      ),
+                      onTap: isAlreadyAdded
+                          ? null
+                          : () {
+                              Navigator.pop(context);
+                              final updatedTrip = trip.copyWith(
+                                places: [...trip.places, place],
+                              );
+                              widget.onUpdateTrip(updatedTrip);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Added ${place.name} to trip'),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            },
+                    );
+                  },
+                ),
+              ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_activeTrip != null) {
@@ -109,29 +180,32 @@ class _TripsScreenState extends State<TripsScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.work_outline, color: Colors.teal.shade600),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'My Trips',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.work_outline, color: Colors.teal.shade600),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'My Trips',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Plan your adventures and track expenses',
-                    style: TextStyle(color: Colors.grey.shade600),
-                  ),
-                ],
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Plan your adventures and track expenses',
+                      style: TextStyle(color: Colors.grey.shade600),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 16),
               ElevatedButton.icon(
                 onPressed: () => setState(() => _showCreateForm = true),
                 icon: const Icon(Icons.add),
@@ -205,7 +279,8 @@ class _TripsScreenState extends State<TripsScreen> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       TextButton(
-                        onPressed: () => setState(() => _showCreateForm = false),
+                        onPressed: () =>
+                            setState(() => _showCreateForm = false),
                         child: const Text('Cancel'),
                       ),
                       const SizedBox(width: 8),
@@ -275,19 +350,28 @@ class _TripsScreenState extends State<TripsScreen> {
               ),
             )
           else
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 1.2,
-              ),
-              itemCount: widget.trips.length,
-              itemBuilder: (context, index) {
-                final trip = widget.trips[index];
-                return _buildTripCard(trip);
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final crossAxisCount = constraints.maxWidth > 800 ? 3 : 2;
+                return GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                    childAspectRatio: constraints.maxWidth > 800
+                        ? 1.4
+                        : constraints.maxWidth > 500
+                            ? 1.2
+                            : 0.85,
+                  ),
+                  itemCount: widget.trips.length,
+                  itemBuilder: (context, index) {
+                    final trip = widget.trips[index];
+                    return _buildTripCard(trip);
+                  },
+                );
               },
             ),
         ],
@@ -371,7 +455,8 @@ class _TripsScreenState extends State<TripsScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(4),
@@ -430,32 +515,41 @@ class _TripsScreenState extends State<TripsScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      trip.name,
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(Icons.location_on,
-                            size: 16, color: Colors.grey.shade500),
-                        const SizedBox(width: 4),
-                        Text(
-                          trip.destination,
-                          style: TextStyle(color: Colors.grey.shade600),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        trip.name,
+                        style: const TextStyle(
+                          fontSize: 24, // Slightly smaller to fit better
+                          fontWeight: FontWeight.bold,
                         ),
-                      ],
-                    ),
-                  ],
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(Icons.location_on,
+                              size: 16, color: Colors.grey.shade500),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              trip.destination,
+                              style: TextStyle(color: Colors.grey.shade600),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 16),
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(12), // Reduced padding
                   decoration: BoxDecoration(
                     color: Colors.teal.shade50,
                     borderRadius: BorderRadius.circular(12),
@@ -476,7 +570,7 @@ class _TripsScreenState extends State<TripsScreen> {
                       Text(
                         '\$${trip.totalExpenses.toStringAsFixed(2)}',
                         style: TextStyle(
-                          fontSize: 20,
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: Colors.teal.shade800,
                         ),
@@ -488,143 +582,201 @@ class _TripsScreenState extends State<TripsScreen> {
             ),
           ),
 
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Places Section
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.location_on, color: Colors.teal.shade600),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Itinerary & Places',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      if (trip.places.isEmpty)
-                        Container(
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: Colors.grey.shade300,
-                              style: BorderStyle.solid,
-                            ),
-                          ),
-                          child: Column(
-                            children: [
-                              Text(
-                                'No places added yet.',
-                                style: TextStyle(color: Colors.grey.shade600),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Go to the Planner tab to add locations!',
-                                style: TextStyle(
-                                  color: Colors.grey.shade500,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      else
-                        ListView.separated(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: trip.places.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 12),
-                          itemBuilder: (context, index) {
-                            final place = trip.places[index];
-                            return _buildPlaceItem(place);
-                          },
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 24),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth > 800;
 
-                // Expenses Section
-                Expanded(
+              if (isWide) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Left Column: Places
+                      Expanded(
+                        flex: 3,
+                        child: _buildPlacesSection(trip),
+                      ),
+                      const SizedBox(width: 24),
+                      // Right Column: Expenses
+                      Expanded(
+                        flex: 2,
+                        child: _buildExpensesSection(trip),
+                      ),
+                    ],
+                  ),
+                );
+              } else {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Icon(Icons.credit_card, color: Colors.teal.shade600),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Expenses',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      // Add Expense Button
-                      ElevatedButton.icon(
-                        onPressed: () => _showAddExpenseDialog(),
-                        icon: const Icon(Icons.add, size: 18),
-                        label: const Text('Add Expense'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.teal.shade600,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size(double.infinity, 44),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      if (trip.expenses.isEmpty)
-                        Container(
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey.shade200),
-                          ),
-                          child: Center(
-                            child: Text(
-                              'No expenses yet',
-                              style: TextStyle(color: Colors.grey.shade500),
-                            ),
-                          ),
-                        )
-                      else
-                        ListView.separated(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: trip.expenses.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 8),
-                          itemBuilder: (context, index) {
-                            final expense = trip.expenses[index];
-                            return _buildExpenseItem(expense);
-                          },
-                        ),
+                      _buildPlacesSection(trip),
+                      const SizedBox(height: 24),
+                      const Divider(),
+                      const SizedBox(height: 24),
+                      _buildExpensesSection(trip),
                     ],
                   ),
-                ),
-              ],
-            ),
+                );
+              }
+            },
           ),
           const SizedBox(height: 32),
         ],
       ),
+    );
+  }
+
+  Widget _buildPlacesSection(Trip trip) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.location_on, color: Colors.teal.shade600),
+                const SizedBox(width: 8),
+                const Text(
+                  'Itinerary & Places',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            if (widget.bookmarks.isNotEmpty)
+              TextButton.icon(
+                onPressed: () => _showSelectSavedPlaceDialog(trip),
+                icon: const Icon(Icons.bookmark_add_outlined, size: 16),
+                label: const Text('Add Saved'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.teal.shade700,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (trip.places.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Colors.grey.shade300,
+                style: BorderStyle.solid,
+              ),
+            ),
+            child: Column(
+              children: [
+                Text(
+                  'No places added yet.',
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 12),
+                if (widget.bookmarks.isNotEmpty)
+                  ElevatedButton.icon(
+                    onPressed: () => _showSelectSavedPlaceDialog(trip),
+                    icon: const Icon(Icons.bookmark),
+                    label: const Text('Add from Saved Places'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal.shade50,
+                      foregroundColor: Colors.teal.shade700,
+                      elevation: 0,
+                    ),
+                  )
+                else
+                  Text(
+                    'Go to the Planner tab to explore and add locations!',
+                    style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontSize: 13,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+              ],
+            ),
+          )
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: trip.places.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final place = trip.places[index];
+              return _buildPlaceItem(place);
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _buildExpensesSection(Trip trip) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.credit_card, color: Colors.teal.shade600),
+                const SizedBox(width: 8),
+                const Text(
+                  'Expenses',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            TextButton.icon(
+              onPressed: () => _showAddExpenseDialog(),
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('Add'),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.teal.shade700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (trip.expenses.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Center(
+              child: Text(
+                'No expenses yet',
+                style: TextStyle(color: Colors.grey.shade500),
+              ),
+            ),
+          )
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: trip.expenses.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              final expense = trip.expenses[index];
+              return _buildExpenseItem(expense);
+            },
+          ),
+      ],
     );
   }
 

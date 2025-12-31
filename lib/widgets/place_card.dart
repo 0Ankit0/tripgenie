@@ -66,30 +66,34 @@ class _PlaceCardState extends State<PlaceCard> {
                 child: Image.network(
                   place.imageUrl ?? place.placeholderImageUrl,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    color: Colors.grey.shade200,
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.image_not_supported,
-                            size: 48,
-                            color: Colors.grey.shade400,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            place.name,
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontWeight: FontWeight.w600,
+                  errorBuilder: (context, error, stackTrace) {
+                    print(
+                        'Image fetch error for ${place.name}: $error'); // DEBUG
+                    return Container(
+                      color: Colors.grey.shade200,
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.image_not_supported,
+                              size: 48,
+                              color: Colors.grey.shade400,
                             ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
+                            const SizedBox(height: 8),
+                            Text(
+                              place.name,
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
               ),
               // Gradient overlay
@@ -216,6 +220,8 @@ class _PlaceCardState extends State<PlaceCard> {
                     color: Colors.grey.shade700,
                     height: 1.4,
                   ),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 16),
 
@@ -321,22 +327,45 @@ class _PlaceCardState extends State<PlaceCard> {
 
                 const SizedBox(height: 16),
 
-                // Directions button
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _openMap,
-                    icon: const Icon(Icons.navigation, size: 18),
-                    label: const Text('Directions'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal.shade600,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                // Action Buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _openMap,
+                        icon: const Icon(Icons.navigation, size: 18),
+                        label: const Text('Directions'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal.shade50,
+                          foregroundColor: Colors.teal.shade700,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            side: BorderSide(color: Colors.teal.shade100),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    if (widget.onAddToTrip != null) ...[
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: widget.onAddToTrip,
+                          icon: const Icon(Icons.add_location_alt, size: 18),
+                          label: const Text('Add to Trip'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.teal.shade600,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),
