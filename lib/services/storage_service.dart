@@ -9,6 +9,13 @@ class StorageService {
   static const String _bookmarksKey = 'bookmarks';
   static const String _expensesKey = 'expenses';
   static const String _tripsKey = 'trips';
+  static const String _searchCountKey = 'search_count';
+  static const String _lastResetDateKey = 'last_reset_date';
+
+  // Default API key for users without their own key
+  static const String defaultApiKey =
+      'AIzaSyDpF8K9vX2nJ4mL3pQ7rS1tU5vW6xY8zA0'; // Replace with your actual default API key
+  static const int maxDailySearches = 10;
 
   final SharedPreferences _prefs;
 
@@ -43,9 +50,11 @@ class StorageService {
   List<Place> getBookmarks() {
     final jsonStr = _prefs.getString(_bookmarksKey);
     if (jsonStr == null || jsonStr.isEmpty) return [];
-    
+
     final List<dynamic> jsonList = jsonDecode(jsonStr);
-    return jsonList.map((j) => Place.fromJson(j as Map<String, dynamic>)).toList();
+    return jsonList
+        .map((j) => Place.fromJson(j as Map<String, dynamic>))
+        .toList();
   }
 
   Future<bool> saveBookmarks(List<Place> bookmarks) {
@@ -76,9 +85,11 @@ class StorageService {
   List<Expense> getExpenses() {
     final jsonStr = _prefs.getString(_expensesKey);
     if (jsonStr == null || jsonStr.isEmpty) return [];
-    
+
     final List<dynamic> jsonList = jsonDecode(jsonStr);
-    return jsonList.map((j) => Expense.fromJson(j as Map<String, dynamic>)).toList();
+    return jsonList
+        .map((j) => Expense.fromJson(j as Map<String, dynamic>))
+        .toList();
   }
 
   Future<bool> saveExpenses(List<Expense> expenses) {
@@ -102,9 +113,11 @@ class StorageService {
   List<Trip> getTrips() {
     final jsonStr = _prefs.getString(_tripsKey);
     if (jsonStr == null || jsonStr.isEmpty) return [];
-    
+
     final List<dynamic> jsonList = jsonDecode(jsonStr);
-    return jsonList.map((j) => Trip.fromJson(j as Map<String, dynamic>)).toList();
+    return jsonList
+        .map((j) => Trip.fromJson(j as Map<String, dynamic>))
+        .toList();
   }
 
   Future<bool> saveTrips(List<Trip> trips) {
@@ -132,5 +145,47 @@ class StorageService {
     final trips = getTrips();
     trips.removeWhere((t) => t.id == tripId);
     return saveTrips(trips);
+  }
+
+  // Search Count Management
+  Future<void> _checkAndResetDailyCount() async {
+    final today = DateTime.now().toIso8601String().split('T')[0];
+    final lastReset = _prefs.getString(_lastResetDateKey);
+
+    if (lastReset != today) {
+      await _prefs.setString(_lastResetDateKey, today);
+      await _prefs.setInt(_searchCountKey, 0);
+    }
+  }
+
+  Future<int> getRemainingSearches() async {
+    await _checkAndResetDailyCount();
+
+    // If user has their own API key, return unlimited (-1)
+    if (hasApiKey()) {
+      return -1;
+    }
+
+    final count = _prefs.getInt(_searchCountKey) ?? 0;
+    return maxDailySearches - count;
+  }
+
+  Future<bool> canMakeSearch() async {
+    final remaining = await getRemainingSearches();
+    return remaining == -1 || remaining > 0;
+  }
+
+  Future<void> incrementSearchCount() async {
+    // Don't increment if user has their own API key
+    if (hasApiKey()) return;
+
+    await _checkAndResetDailyCount();
+    final count = _prefs.getInt(_searchCountKey) ?? 0;
+    await _prefs.setInt(_searchCountKey, count + 1);
+  }
+
+  String getEffectiveApiKey() {
+    final userKey = getApiKey();
+    return userKey ?? defaultApiKey;
   }
 }

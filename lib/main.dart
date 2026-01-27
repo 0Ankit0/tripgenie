@@ -1,7 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'services/storage_service.dart';
-import 'screens/api_key_setup_screen.dart';
 import 'screens/home_screen.dart';
 import 'firebase_options.dart';
 
@@ -24,38 +23,6 @@ class TripGenieApp extends StatefulWidget {
 }
 
 class _TripGenieAppState extends State<TripGenieApp> {
-  late bool _hasApiKey;
-  String? _apiKey;
-
-  @override
-  void initState() {
-    super.initState();
-    _checkApiKey();
-  }
-
-  void _checkApiKey() {
-    _hasApiKey = widget.storageService.hasApiKey();
-    if (_hasApiKey) {
-      _apiKey = widget.storageService.getApiKey();
-    }
-  }
-
-  void _onApiKeySaved(String apiKey) async {
-    await widget.storageService.setApiKey(apiKey);
-    setState(() {
-      _hasApiKey = true;
-      _apiKey = apiKey;
-    });
-  }
-
-  void _onLogout() async {
-    await widget.storageService.clearApiKey();
-    setState(() {
-      _hasApiKey = false;
-      _apiKey = null;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -72,13 +39,7 @@ class _TripGenieAppState extends State<TripGenieApp> {
         ),
         fontFamily: 'Roboto',
       ),
-      home: _hasApiKey && _apiKey != null
-          ? HomeScreen(
-              storageService: widget.storageService,
-              apiKey: _apiKey!,
-              onLogout: _onLogout,
-            )
-          : ApiKeySetupScreen(onApiKeySaved: _onApiKeySaved),
+      home: HomeScreen(storageService: widget.storageService),
     );
   }
 }

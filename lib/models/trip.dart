@@ -9,6 +9,9 @@ class Trip {
   final String? endDate;
   final List<Place> places;
   final List<Expense> expenses;
+  final String? itinerary;
+  final String? tripTips;
+  final String? weather;
 
   Trip({
     required this.id,
@@ -18,6 +21,9 @@ class Trip {
     this.endDate,
     required this.places,
     required this.expenses,
+    this.itinerary,
+    this.tripTips,
+    this.weather,
   });
 
   Map<String, dynamic> toJson() => {
@@ -28,6 +34,9 @@ class Trip {
         'endDate': endDate,
         'places': places.map((p) => p.toJson()).toList(),
         'expenses': expenses.map((e) => e.toJson()).toList(),
+        'itinerary': itinerary,
+        'tripTips': tripTips,
+        'weather': weather,
       };
 
   factory Trip.fromJson(Map<String, dynamic> json) => Trip(
@@ -44,6 +53,9 @@ class Trip {
                 ?.map((e) => Expense.fromJson(e as Map<String, dynamic>))
                 .toList() ??
             [],
+        itinerary: json['itinerary'] as String?,
+        tripTips: json['tripTips'] as String?,
+        weather: json['weather'] as String?,
       );
 
   Trip copyWith({
@@ -54,6 +66,9 @@ class Trip {
     String? endDate,
     List<Place>? places,
     List<Expense>? expenses,
+    String? itinerary,
+    String? tripTips,
+    String? weather,
   }) {
     return Trip(
       id: id ?? this.id,
@@ -63,6 +78,9 @@ class Trip {
       endDate: endDate ?? this.endDate,
       places: places ?? this.places,
       expenses: expenses ?? this.expenses,
+      itinerary: itinerary ?? this.itinerary,
+      tripTips: tripTips ?? this.tripTips,
+      weather: weather ?? this.weather,
     );
   }
 

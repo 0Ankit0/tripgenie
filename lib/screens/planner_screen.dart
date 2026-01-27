@@ -1,20 +1,25 @@
 import 'package:flutter/material.dart';
 import '../models/place.dart';
 import '../services/gemini_service.dart';
+import '../services/storage_service.dart';
 import '../widgets/place_card.dart';
 
 class PlannerScreen extends StatefulWidget {
   final GeminiService geminiService;
+  final StorageService storageService;
   final Set<String> bookmarkedIds;
   final void Function(Place place) onToggleBookmark;
   final void Function(Place place) onAddToTrip;
+  final VoidCallback onSearchComplete;
 
   const PlannerScreen({
     super.key,
     required this.geminiService,
+    required this.storageService,
     required this.bookmarkedIds,
     required this.onToggleBookmark,
     required this.onAddToTrip,
+    required this.onSearchComplete,
   });
 
   @override
@@ -53,6 +58,29 @@ class _PlannerScreenState extends State<PlannerScreen> {
     final destination = _searchController.text.trim();
     if (destination.isEmpty) return;
 
+    // Check if user can make a search
+    final canSearch = await widget.storageService.canMakeSearch();
+    if (!canSearch) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Daily search limit reached! Add your API key in Settings for unlimited searches.',
+            ),
+            backgroundColor: Colors.red.shade600,
+            action: SnackBarAction(
+              label: 'Settings',
+              textColor: Colors.white,
+              onPressed: () {
+                // The settings button in app bar will handle this
+              },
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _error = null;
@@ -60,6 +88,11 @@ class _PlannerScreenState extends State<PlannerScreen> {
 
     try {
       final places = await widget.geminiService.searchPlaces(destination);
+
+      // Increment search count after successful search
+      await widget.storageService.incrementSearchCount();
+      widget.onSearchComplete();
+
       setState(() {
         _places = places;
         _currentDestination = destination;
@@ -68,7 +101,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
     } catch (e) {
       setState(() {
         _error =
-            'Failed to fetch places. Please check your API key and try again.';
+            'Failed to fetch places. Please check your internet connection and try again.';
         _isLoading = false;
       });
     }

@@ -10,14 +10,10 @@ import 'saved_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final StorageService storageService;
-  final String apiKey;
-  final VoidCallback onLogout;
 
   const HomeScreen({
     super.key,
     required this.storageService,
-    required this.apiKey,
-    required this.onLogout,
   });
 
   @override
@@ -29,15 +25,39 @@ class _HomeScreenState extends State<HomeScreen> {
   late GeminiService _geminiService;
   late List<Place> _bookmarks;
   late List<Trip> _trips;
+  int _remainingSearches = 10;
+  bool _hasUserApiKey = false;
 
   static const _uuid = Uuid();
 
   @override
   void initState() {
     super.initState();
-    _geminiService = GeminiService(widget.apiKey);
+    _initializeServices();
     _bookmarks = widget.storageService.getBookmarks();
     _trips = widget.storageService.getTrips();
+  }
+
+  void _initializeServices() async {
+    _hasUserApiKey = widget.storageService.hasApiKey();
+    final apiKey = widget.storageService.getEffectiveApiKey();
+    _geminiService = GeminiService(apiKey);
+
+    final remaining = await widget.storageService.getRemainingSearches();
+    setState(() {
+      _remainingSearches = remaining;
+    });
+  }
+
+  void _refreshApiKeyStatus() async {
+    _hasUserApiKey = widget.storageService.hasApiKey();
+    final apiKey = widget.storageService.getEffectiveApiKey();
+    _geminiService = GeminiService(apiKey);
+
+    final remaining = await widget.storageService.getRemainingSearches();
+    setState(() {
+      _remainingSearches = remaining;
+    });
   }
 
   Set<String> get _bookmarkedIds => _bookmarks.map((p) => p.id).toSet();
@@ -177,58 +197,131 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showSettingsDialog() {
+    final apiKeyController = TextEditingController(
+      text: widget.storageService.getApiKey() ?? '',
+    );
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Settings'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'API Key: ${widget.apiKey.substring(0, 8)}...',
-              style: const TextStyle(fontFamily: 'monospace'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Gemini API Key',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Add your own API key for unlimited searches. Without it, you get 10 free searches per day.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: apiKeyController,
+                decoration: InputDecoration(
+                  hintText: 'Enter your Gemini API key',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  prefixIcon: const Icon(Icons.key),
+                ),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      color: Colors.blue.shade700,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Get your free API key from ai.google.dev',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.blue.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          if (widget.storageService.hasApiKey())
+            TextButton(
+              onPressed: () async {
+                await widget.storageService.clearApiKey();
+                apiKeyController.clear();
+                _refreshApiKeyStatus();
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                          'API key removed. Using default key with 10 daily searches.'),
+                    ),
+                  );
+                }
+              },
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Remove Key'),
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _confirmLogout();
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Clear API Key'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _confirmLogout() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Clear API Key?'),
-        content: const Text(
-          'This will remove your API key and return to the setup screen.',
-        ),
-        actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              widget.onLogout();
+          ElevatedButton(
+            onPressed: () async {
+              final key = apiKeyController.text.trim();
+              if (key.isNotEmpty) {
+                await widget.storageService.setApiKey(key);
+                _refreshApiKeyStatus();
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                          'API key saved! You now have unlimited searches.'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a valid API key'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
             },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Clear'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.teal.shade600,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Save'),
           ),
         ],
       ),
@@ -274,26 +367,101 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: IndexedStack(
-        index: _currentIndex,
+      body: Column(
         children: [
-          PlannerScreen(
-            geminiService: _geminiService,
-            bookmarkedIds: _bookmarkedIds,
-            onToggleBookmark: _toggleBookmark,
-            onAddToTrip: _addPlaceToTrip,
-          ),
-          TripsScreen(
-            trips: _trips,
-            bookmarks: _bookmarks,
-            onCreateTrip: _createTrip,
-            onUpdateTrip: _updateTrip,
-            onDeleteTrip: _deleteTrip,
-          ),
-          SavedScreen(
-            bookmarks: _bookmarks,
-            onToggleBookmark: _toggleBookmark,
-            onAddToTrip: _addPlaceToTrip,
+          // Banner for users without API key
+          if (!_hasUserApiKey)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.orange.shade400, Colors.orange.shade600],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.white, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Limited Mode: $_remainingSearches/${StorageService.maxDailySearches} searches remaining today',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const Text(
+                          'Add your API key in Settings for unlimited searches',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _showSettingsDialog,
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.white.withOpacity(0.2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text(
+                      'Add Key',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Expanded(
+            child: IndexedStack(
+              index: _currentIndex,
+              children: [
+                PlannerScreen(
+                  geminiService: _geminiService,
+                  storageService: widget.storageService,
+                  bookmarkedIds: _bookmarkedIds,
+                  onToggleBookmark: _toggleBookmark,
+                  onAddToTrip: _addPlaceToTrip,
+                  onSearchComplete: _refreshApiKeyStatus,
+                ),
+                TripsScreen(
+                  trips: _trips,
+                  bookmarks: _bookmarks,
+                  geminiService: _geminiService,
+                  storageService: widget.storageService,
+                  onCreateTrip: _createTrip,
+                  onUpdateTrip: _updateTrip,
+                  onDeleteTrip: _deleteTrip,
+                  onAIFeatureUsed: _refreshApiKeyStatus,
+                ),
+                SavedScreen(
+                  bookmarks: _bookmarks,
+                  onToggleBookmark: _toggleBookmark,
+                  onAddToTrip: _addPlaceToTrip,
+                ),
+              ],
+            ),
           ),
         ],
       ),

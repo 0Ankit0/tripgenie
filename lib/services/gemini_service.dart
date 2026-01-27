@@ -190,4 +190,97 @@ Do not include any introductory or concluding text. Just the data block.
     print(
         'DEBUG: Failed to find image for ${place.name} after ${strategies.length} attempts.');
   }
+
+  Future<String> generateTripItinerary(
+    String destination,
+    List<Place> places, {
+    String? startDate,
+    String? endDate,
+  }) async {
+    try {
+      final placeNames = places.map((p) => p.name).join(', ');
+      final dateContext = startDate != null && endDate != null
+          ? 'from $startDate to $endDate'
+          : 'for the trip';
+
+      final prompt = '''
+I am planning a trip to $destination $dateContext.
+I want to visit: $placeNames.
+
+Create a detailed itinerary.
+Group by proximity.
+
+Output Rules:
+- Use standard Markdown (## for headers, - for lists, ** for bold).
+- Do NOT use HTML tags like <strong>, <br>, etc.
+- Do NOT use Markdown tables.
+''';
+
+      final response = await _model.generateContent([Content.text(prompt)]);
+      return response.text ?? 'Could not generate itinerary.';
+    } catch (e) {
+      print('Error generating itinerary: $e');
+      throw Exception('Failed to generate itinerary');
+    }
+  }
+
+  Future<String> generateTripTips(
+    String destination,
+    List<Place> places,
+  ) async {
+    try {
+      final placeNames = places.map((p) => p.name).join(', ');
+
+      final prompt = '''
+I am visiting $destination. Places: $placeNames.
+Provide a guide on:
+1. Packing List
+2. Special Rules/Etiquette
+3. Dos and Don'ts
+4. Travel Tips
+
+Output Rules:
+- Use standard Markdown (## for headers, - for lists, ** for bold).
+- Do NOT use HTML tags.
+''';
+
+      final response = await _model.generateContent([Content.text(prompt)]);
+      return response.text ?? 'Could not generate tips.';
+    } catch (e) {
+      print('Error generating tips: $e');
+      throw Exception('Failed to generate trip tips');
+    }
+  }
+
+  Future<String> generateWeatherForecast(
+    String destination, {
+    String? startDate,
+    String? endDate,
+  }) async {
+    try {
+      final datePrompt = startDate != null && endDate != null
+          ? 'daily forecast between $startDate and $endDate'
+          : 'typical 5-day forecast for this time of year';
+
+      final prompt = '''
+Provide a weather forecast for $destination based on this context: $datePrompt.
+
+Return a JSON array of daily forecasts with the following structure:
+[
+  {
+    "day": "The day of the week or date, e.g., 'Mon', 'Oct 25', or '2024-10-25'",
+    "temperature": "Temperature formatted as 'High° / Low°' (e.g. 24°C / 18°C)",
+    "condition": "Short weather condition (e.g. Sunny, Cloudy, Rainy, Snow)",
+    "icon": "A keyword for the icon: 'sun', 'cloud', 'rain', 'snow', 'storm', 'wind'"
+  }
+]
+''';
+
+      final response = await _model.generateContent([Content.text(prompt)]);
+      return response.text ?? '[]';
+    } catch (e) {
+      print('Error getting weather: $e');
+      return '[]';
+    }
+  }
 }
