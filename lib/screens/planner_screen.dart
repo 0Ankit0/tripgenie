@@ -7,10 +7,12 @@ import '../models/place.dart';
 import '../models/search_filters.dart';
 import '../screens/destination_detail_screen.dart';
 import '../services/gemini_service.dart';
+import '../services/storage_service.dart';
 import '../widgets/place_card.dart';
 
 class PlannerScreen extends StatefulWidget {
   final GeminiService geminiService;
+  final StorageService storageService;
   final Set<String> bookmarkedIds;
   final void Function(Place place) onToggleBookmark;
   final void Function(Place place) onAddToTrip;
@@ -19,6 +21,7 @@ class PlannerScreen extends StatefulWidget {
   const PlannerScreen({
     super.key,
     required this.geminiService,
+    required this.storageService,
     required this.bookmarkedIds,
     required this.onToggleBookmark,
     required this.onAddToTrip,
@@ -249,7 +252,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
     } catch (e) {
       setState(() {
         _error =
-            'Failed to fetch places. Please check your API key and try again.';
+            'Failed to fetch places. Please check your internet connection and try again.';
         _isLoading = false;
       });
     }

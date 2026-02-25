@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/expense.dart';
@@ -34,6 +36,11 @@ class _TripsScreenState extends State<TripsScreen> {
   bool _showCreateForm = false;
   final _nameController = TextEditingController();
   final _destController = TextEditingController();
+
+  // AI Modal State
+  String? _activeModal; // 'itinerary', 'tips', or null
+  bool _isGenerating = false;
+  bool _isWeatherLoading = false;
 
   Trip? get _activeTrip =>
       widget.trips.where((t) => t.id == _activeTripId).firstOrNull;
@@ -95,6 +102,211 @@ class _TripsScreenState extends State<TripsScreen> {
       expenses: _activeTrip!.expenses.where((e) => e.id != expenseId).toList(),
     );
     await widget.onUpdateTrip(updatedTrip);
+  }
+
+  // Date Management
+  Future<void> _selectDate(BuildContext context, bool isStartDate) async {
+    if (_activeTrip == null) return;
+
+    final initialDate = isStartDate
+        ? (_activeTrip!.startDate != null
+            ? DateTime.parse(_activeTrip!.startDate!)
+            : DateTime.now())
+        : (_activeTrip!.endDate != null
+            ? DateTime.parse(_activeTrip!.endDate!)
+            : DateTime.now());
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+    );
+
+    if (picked != null) {
+      final dateString = picked.toIso8601String().split('T')[0];
+      final updatedTrip = isStartDate
+          ? _activeTrip!.copyWith(
+              startDate: dateString,
+              weather: null) // Clear weather to force refresh
+          : _activeTrip!.copyWith(endDate: dateString, weather: null);
+      widget.onUpdateTrip(updatedTrip);
+    }
+  }
+
+  // AI Features
+  Future<void> _generateItinerary() async {
+    if (_activeTrip == null || _activeTrip!.places.isEmpty) return;
+
+    if (_activeTrip!.itinerary != null) {
+      setState(() => _activeModal = 'itinerary');
+      return;
+    }
+
+    setState(() {
+      _isGenerating = true;
+      _activeModal = 'itinerary';
+    });
+
+    try {
+      // Note: generateTripItinerary would be called here when available
+      // For now, this is a placeholder
+      setState(() => _activeModal = null);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to generate itinerary')),
+        );
+        setState(() => _activeModal = null);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGenerating = false);
+      }
+    }
+  }
+
+  Future<void> _generateTips() async {
+    if (_activeTrip == null || _activeTrip!.places.isEmpty) return;
+
+    if (_activeTrip!.tripTips != null) {
+      setState(() => _activeModal = 'tips');
+      return;
+    }
+
+    setState(() {
+      _isGenerating = true;
+      _activeModal = 'tips';
+    });
+
+    try {
+      // Note: generateTripTips would be called here when available
+      // For now, this is a placeholder
+      setState(() => _activeModal = null);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to generate tips')),
+        );
+        setState(() => _activeModal = null);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGenerating = false);
+      }
+    }
+  }
+
+  Future<void> _fetchWeather() async {
+    if (_activeTrip == null) return;
+
+    setState(() => _isWeatherLoading = true);
+
+    try {
+      // Note: generateWeatherForecast would be called here when available
+      // For now, this is a placeholder
+    } catch (e) {
+      print('Error fetching weather: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isWeatherLoading = false);
+      }
+    }
+  }
+
+  List<dynamic>? _parseWeatherData(String? weatherJson) {
+    if (weatherJson == null) return null;
+    try {
+      final parsed = json.decode(weatherJson);
+      if (parsed is List) return parsed;
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  IconData _getWeatherIcon(String? iconName) {
+    switch (iconName?.toLowerCase()) {
+      case 'sun':
+        return Icons.wb_sunny;
+      case 'cloud':
+        return Icons.cloud;
+      case 'rain':
+        return Icons.umbrella;
+      case 'snow':
+        return Icons.ac_unit;
+      case 'storm':
+        return Icons.thunderstorm;
+      case 'wind':
+        return Icons.air;
+      default:
+        return Icons.wb_cloudy;
+    }
+  }
+
+  Widget _renderFormattedText(String? text) {
+    if (text == null) return const SizedBox.shrink();
+
+    final lines = text.split('\n');
+    final widgets = <Widget>[];
+
+    for (var line in lines) {
+      if (line.startsWith('## ')) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(top: 16, bottom: 8),
+          child: Text(
+            line.replaceFirst('## ', ''),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.teal.shade800,
+            ),
+          ),
+        ));
+      } else if (line.startsWith('### ')) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(top: 12, bottom: 4),
+          child: Text(
+            line.replaceFirst('### ', ''),
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ));
+      } else if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(left: 16, bottom: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('• ', style: TextStyle(fontSize: 16)),
+              Expanded(
+                child: Text(
+                  line.replaceFirst(RegExp(r'^[\s-*]+'), ''),
+                  style: TextStyle(color: Colors.grey.shade700),
+                ),
+              ),
+            ],
+          ),
+        ));
+      } else if (line.trim().isEmpty) {
+        widgets.add(const SizedBox(height: 8));
+      } else {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            line,
+            style: TextStyle(color: Colors.grey.shade700),
+          ),
+        ));
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: widgets,
+    );
   }
 
   void _showSelectSavedPlaceDialog(Trip trip) {
@@ -489,146 +701,384 @@ class _TripsScreenState extends State<TripsScreen> {
 
   Widget _buildDetailView() {
     final trip = _activeTrip!;
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Back button
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: TextButton.icon(
-              onPressed: () => setState(() => _activeTripId = null),
-              icon: const Icon(Icons.arrow_back, size: 18),
-              label: const Text('Back to Trips'),
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.grey.shade600,
-              ),
-            ),
-          ),
 
-          // Header
-          Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        trip.name,
-                        style: const TextStyle(
-                          fontSize: 24, // Slightly smaller to fit better
-                          fontWeight: FontWeight.bold,
+    // Calculate duration
+    final startDateObj =
+        trip.startDate != null ? DateTime.tryParse(trip.startDate!) : null;
+    final endDateObj =
+        trip.endDate != null ? DateTime.tryParse(trip.endDate!) : null;
+    final durationDays = startDateObj != null && endDateObj != null
+        ? endDateObj.difference(startDateObj).inDays + 1
+        : 0;
+
+    // Auto-fetch weather if not present
+    if (trip.weather == null && !_isWeatherLoading) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fetchWeather());
+    }
+
+    return Stack(
+      children: [
+        SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Back button
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: TextButton.icon(
+                  onPressed: () => setState(() => _activeTripId = null),
+                  icon: const Icon(Icons.arrow_back, size: 18),
+                  label: const Text('Back to Trips'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.grey.shade600,
+                  ),
+                ),
+              ),
+
+              // Enhanced Header with Dates and Weather
+              Container(
+                margin: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Title and Budget Row
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                trip.name,
+                                style: const TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Icon(Icons.location_on,
+                                      size: 16, color: Colors.grey.shade500),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      trip.destination,
+                                      style: TextStyle(
+                                          color: Colors.grey.shade600),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
+                        const SizedBox(width: 16),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.teal.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                'BUDGET',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.teal.shade600,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '\$${trip.totalExpenses.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.teal.shade800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 20),
+                    const Divider(),
+                    const SizedBox(height: 20),
+
+                    // Date Pickers and Weather
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isWide = constraints.maxWidth > 600;
+
+                        if (isWide) {
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                flex: 2,
+                                child: _buildDateSection(trip, startDateObj,
+                                    endDateObj, durationDays),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                flex: 3,
+                                child: _buildWeatherSection(trip),
+                              ),
+                            ],
+                          );
+                        } else {
+                          return Column(
+                            children: [
+                              _buildDateSection(
+                                  trip, startDateObj, endDateObj, durationDays),
+                              const SizedBox(height: 16),
+                              _buildWeatherSection(trip),
+                            ],
+                          );
+                        }
+                      },
+                    ),
+
+                    const SizedBox(height: 20),
+                    const Divider(),
+                    const SizedBox(height: 16),
+
+                    // AI Action Buttons
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _buildAIButton(
+                          label: trip.itinerary != null
+                              ? 'View Itinerary'
+                              : 'Prepare Itinerary',
+                          icon: Icons.auto_awesome,
+                          color: trip.itinerary != null
+                              ? Colors.purple
+                              : Colors.teal,
+                          onPressed:
+                              trip.places.isEmpty ? null : _generateItinerary,
+                        ),
+                        _buildAIButton(
+                          label: trip.tripTips != null
+                              ? 'View Tips'
+                              : 'Gears & Tips',
+                          icon: Icons.backpack,
+                          color: trip.tripTips != null
+                              ? Colors.amber
+                              : Colors.grey.shade700,
+                          onPressed: trip.places.isEmpty ? null : _generateTips,
+                        ),
+                        if (trip.places.isNotEmpty)
+                          _buildAIButton(
+                            label: 'View Route',
+                            icon: Icons.map,
+                            color: Colors.blue,
+                            onPressed: () => _openRouteInMaps(trip),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isWide = constraints.maxWidth > 800;
+
+                  if (isWide) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.location_on,
-                              size: 16, color: Colors.grey.shade500),
-                          const SizedBox(width: 4),
+                          // Left Column: Places
                           Expanded(
-                            child: Text(
-                              trip.destination,
-                              style: TextStyle(color: Colors.grey.shade600),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            flex: 3,
+                            child: _buildPlacesSection(trip),
+                          ),
+                          const SizedBox(width: 24),
+                          // Right Column: Expenses
+                          Expanded(
+                            flex: 2,
+                            child: _buildExpensesSection(trip),
                           ),
                         ],
                       ),
-                    ],
+                    );
+                  } else {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildPlacesSection(trip),
+                          const SizedBox(height: 24),
+                          const Divider(),
+                          const SizedBox(height: 24),
+                          _buildExpensesSection(trip),
+                        ],
+                      ),
+                    );
+                  }
+                },
+              ),
+              const SizedBox(height: 32),
+            ],
+          ),
+        ),
+
+        // Modal Overlay for AI Content
+        if (_activeModal != null)
+          GestureDetector(
+            onTap: () => setState(() => _activeModal = null),
+            child: Container(
+              color: Colors.black.withValues(alpha: 0.5),
+              child: Center(
+                child: GestureDetector(
+                  onTap: () {}, // Prevent closing when tapping on modal
+                  child: Container(
+                    margin: const EdgeInsets.all(24),
+                    constraints:
+                        const BoxConstraints(maxWidth: 700, maxHeight: 600),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        // Modal Header
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.teal.shade600,
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(16),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _activeModal == 'itinerary'
+                                    ? Icons.auto_awesome
+                                    : Icons.backpack,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _activeModal == 'itinerary'
+                                      ? 'Suggested Itinerary'
+                                      : 'Gears & Travel Tips',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: () =>
+                                    setState(() => _activeModal = null),
+                                icon: const Icon(Icons.close,
+                                    color: Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Modal Content
+                        Expanded(
+                          child: _isGenerating
+                              ? Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      CircularProgressIndicator(
+                                        color: Colors.teal.shade600,
+                                      ),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        'Consulting the Travel Genie...',
+                                        style: TextStyle(
+                                          color: Colors.teal.shade600,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : SingleChildScrollView(
+                                  padding: const EdgeInsets.all(24),
+                                  child: _renderFormattedText(
+                                    _activeModal == 'itinerary'
+                                        ? _activeTrip?.itinerary
+                                        : _activeTrip?.tripTips,
+                                  ),
+                                ),
+                        ),
+
+                        // Modal Footer
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: const BorderRadius.vertical(
+                              bottom: Radius.circular(16),
+                            ),
+                            border: Border(
+                              top: BorderSide(color: Colors.grey.shade200),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              ElevatedButton(
+                                onPressed: () =>
+                                    setState(() => _activeModal = null),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.grey.shade200,
+                                  foregroundColor: Colors.grey.shade800,
+                                  elevation: 0,
+                                ),
+                                child: const Text('Close'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(width: 16),
-                Container(
-                  padding: const EdgeInsets.all(12), // Reduced padding
-                  decoration: BoxDecoration(
-                    color: Colors.teal.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        'TOTAL BUDGET',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.teal.shade600,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '\$${trip.totalExpenses.toStringAsFixed(2)}',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.teal.shade800,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
-
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isWide = constraints.maxWidth > 800;
-
-              if (isWide) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Left Column: Places
-                      Expanded(
-                        flex: 3,
-                        child: _buildPlacesSection(trip),
-                      ),
-                      const SizedBox(width: 24),
-                      // Right Column: Expenses
-                      Expanded(
-                        flex: 2,
-                        child: _buildExpensesSection(trip),
-                      ),
-                    ],
-                  ),
-                );
-              } else {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildPlacesSection(trip),
-                      const SizedBox(height: 24),
-                      const Divider(),
-                      const SizedBox(height: 24),
-                      _buildExpensesSection(trip),
-                    ],
-                  ),
-                );
-              }
-            },
-          ),
-          const SizedBox(height: 32),
-        ],
-      ),
+      ],
     );
   }
 
@@ -975,5 +1425,345 @@ class _TripsScreenState extends State<TripsScreen> {
         ),
       ),
     );
+  }
+
+  // New AI-related helper widgets
+  Widget _buildDateSection(Trip trip, DateTime? startDateObj,
+      DateTime? endDateObj, int durationDays) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.teal.shade50, Colors.blue.shade50],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.teal.shade100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.calendar_today, size: 14, color: Colors.teal.shade700),
+              const SizedBox(width: 6),
+              Text(
+                'TRAVEL DATES',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.teal.shade700,
+                  letterSpacing: 1,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'START DATE',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.teal.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    InkWell(
+                      onTap: () => _selectDate(context, true),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.teal.shade200),
+                        ),
+                        child: Text(
+                          trip.startDate ?? 'Select date',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: trip.startDate != null
+                                ? Colors.grey.shade700
+                                : Colors.grey.shade400,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Padding(
+                padding: const EdgeInsets.only(top: 20),
+                child: Icon(Icons.arrow_forward,
+                    size: 16, color: Colors.teal.shade300),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'END DATE',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.teal.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    InkWell(
+                      onTap: () => _selectDate(context, false),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.teal.shade200),
+                        ),
+                        child: Text(
+                          trip.endDate ?? 'Select date',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: trip.endDate != null
+                                ? Colors.grey.shade700
+                                : Colors.grey.shade400,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (durationDays > 0) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.teal.shade100.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '$durationDays Day Trip',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal.shade700,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWeatherSection(Trip trip) {
+    final weatherData = _parseWeatherData(trip.weather);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.blue.shade50, Colors.indigo.shade50],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue.shade100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.thermostat, size: 14, color: Colors.blue.shade700),
+                  const SizedBox(width: 6),
+                  Text(
+                    'FORECAST',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue.shade700,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ],
+              ),
+              if (trip.weather != null)
+                TextButton(
+                  onPressed: _fetchWeather,
+                  style: TextButton.styleFrom(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(
+                    'Refresh',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue.shade600,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_isWeatherLoading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: CircularProgressIndicator(),
+              ),
+            )
+          else if (weatherData != null && weatherData.isNotEmpty)
+            SizedBox(
+              height: 100,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: weatherData.length,
+                itemBuilder: (context, index) {
+                  final day = weatherData[index];
+                  return Container(
+                    width: 80,
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.8),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue.shade100),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        Text(
+                          day['day'] ?? '',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                        Icon(
+                          _getWeatherIcon(day['icon']),
+                          size: 24,
+                          color: Colors.blue.shade600,
+                        ),
+                        Text(
+                          day['temperature'] ?? '',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey.shade800,
+                          ),
+                        ),
+                        Text(
+                          day['condition'] ?? '',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: Colors.grey.shade500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            )
+          else
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Icon(Icons.wb_cloudy,
+                        size: 32, color: Colors.blue.shade200),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Set dates for forecast',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.blue.shade400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAIButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback? onPressed,
+  }) {
+    return ElevatedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 16),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: onPressed != null ? color : Colors.grey.shade300,
+        foregroundColor:
+            onPressed != null ? Colors.white : Colors.grey.shade500,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
+  }
+
+  void _openRouteInMaps(Trip trip) {
+    if (trip.places.isEmpty) return;
+
+    // Build Google Maps URL
+    String url;
+    if (trip.places.length == 1) {
+      final place = trip.places[0];
+      url = place.sourceUri ??
+          'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(place.name)}';
+    } else {
+      final origin = Uri.encodeComponent(trip.places.first.name);
+      final destination = Uri.encodeComponent(trip.places.last.name);
+      final waypoints = trip.places.length > 2
+          ? trip.places
+              .sublist(1, trip.places.length - 1)
+              .map((p) => Uri.encodeComponent(p.name))
+              .join('|')
+          : '';
+      url =
+          'https://www.google.com/maps/dir/?api=1&origin=$origin&destination=$destination${waypoints.isNotEmpty ? '&waypoints=$waypoints' : ''}&travelmode=driving';
+    }
+
+    // Open URL
+    // Note: You'll need to add url_launcher dependency and import it
+    await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
   }
 }
