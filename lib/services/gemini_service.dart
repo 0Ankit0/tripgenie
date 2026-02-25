@@ -1,8 +1,11 @@
+// ignore_for_file: avoid_print
+
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:uuid/uuid.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../models/place.dart';
+import '../models/search_filters.dart';
 
 class GeminiService {
   final String apiKey;
@@ -20,40 +23,46 @@ class GeminiService {
     );
   }
 
-  Future<List<Place>> searchPlaces(String destination) async {
+  Future<List<Place>> searchPlaces(
+    String destination, {
+    SearchFilters? filters,
+  }) async {
     // DEBUG: Print the API key to help the user verify it
     print('DEBUG: Using Gemini API Key: $apiKey');
 
+    final filtersText = _buildFiltersText(filters);
+
     final prompt = '''
-I am planning a trip to $destination. 
-Please find 5 to 8 specific popular tourist attractions or places to visit in $destination.
+  I am planning a trip to $destination.
+  $filtersText
+  Please find 5 to 8 specific popular tourist attractions or places to visit in $destination.
 
-For each place, you MUST provide the following details:
-1. Name
-2. A short description (under 20 words)
-3. Approximate Latitude
-4. Approximate Longitude
-5. Opening Hours (e.g., "9 AM - 5 PM" or "24 hours" or "See website")
-6. Official Website URL (or "N/A" if not available)
-7. A summary of 3 distinct user reviews (separated by semicolons, e.g. "Great view; Crowded; Expensive")
-8. Average Rating (e.g. "4.5" or "N/A")
+  For each place, you MUST provide the following details:
+  1. Name
+  2. A short description (under 20 words)
+  3. Approximate Latitude
+  4. Approximate Longitude
+  5. Opening Hours (e.g., "9 AM - 5 PM" or "24 hours" or "See website")
+  6. Official Website URL (or "N/A" if not available)
+  7. A summary of 3 distinct user reviews (separated by semicolons, e.g. "Great view; Crowded; Expensive")
+  8. Average Rating (e.g. "4.5" or "N/A")
 
-CRITICAL OUTPUT FORMAT:
-Do not use Markdown tables. Use the following custom delimiter format exactly.
-Separate fields with "|||" and separate places with "###".
+  CRITICAL OUTPUT FORMAT:
+  Do not use Markdown tables. Use the following custom delimiter format exactly.
+  Separate fields with "|||" and separate places with "###".
 
-Format:
-Name ||| Description ||| Latitude ||| Longitude ||| Opening Hours ||| Website ||| Review 1; Review 2; Review 3 ||| Rating
-###
-Name ||| Description ||| ...
+  Format:
+  Name ||| Description ||| Latitude ||| Longitude ||| Opening Hours ||| Website ||| Review 1; Review 2; Review 3 ||| Rating
+  ###
+  Name ||| Description ||| ...
 
-Example:
-Eiffel Tower ||| Iconic iron lady of Paris ||| 48.8584 ||| 2.2945 ||| 9:30 AM - 11:45 PM ||| https://www.toureiffel.paris ||| Amazing views; Long queues; Must see ||| 4.6
-###
-Louvre Museum ||| ...
+  Example:
+  Eiffel Tower ||| Iconic iron lady of Paris ||| 48.8584 ||| 2.2945 ||| 9:30 AM - 11:45 PM ||| https://www.toureiffel.paris ||| Amazing views; Long queues; Must see ||| 4.6
+  ###
+  Louvre Museum ||| ...
 
-Do not include any introductory or concluding text. Just the data block.
-''';
+  Do not include any introductory or concluding text. Just the data block.
+  ''';
 
     final response = await _model.generateContent([Content.text(prompt)]);
     final text = response.text ?? '';
@@ -189,5 +198,27 @@ Do not include any introductory or concluding text. Just the data block.
 
     print(
         'DEBUG: Failed to find image for ${place.name} after ${strategies.length} attempts.');
+  }
+
+  String _buildFiltersText(SearchFilters? filters) {
+    if (filters == null) return '';
+    final parts = <String>[];
+    if (filters.travelStyle != null) {
+      parts.add('Travel style: ${filters.travelStyle}.');
+    }
+    if (filters.budget != null) {
+      parts.add('Budget level: ${filters.budget}.');
+    }
+    if (filters.durationDays != null) {
+      parts.add('Trip duration: ${filters.durationDays} days.');
+    }
+    if (filters.season != null) {
+      parts.add('Season: ${filters.season}.');
+    }
+    if (filters.crowdLevel != null) {
+      parts.add('Prefer crowd level: ${filters.crowdLevel}.');
+    }
+    if (parts.isEmpty) return '';
+    return 'Traveler profile: ${parts.join(' ')}';
   }
 }

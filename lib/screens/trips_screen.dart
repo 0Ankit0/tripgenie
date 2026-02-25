@@ -1,16 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
-import '../models/trip.dart';
-import '../models/place.dart';
+
 import '../models/expense.dart';
+import '../models/place.dart';
+import '../models/trip.dart';
 import '../widgets/expense_form.dart';
 
 class TripsScreen extends StatefulWidget {
   final List<Trip> trips;
   final List<Place> bookmarks;
-  final void Function(Trip trip) onCreateTrip;
-  final void Function(Trip trip) onUpdateTrip;
-  final void Function(String tripId) onDeleteTrip;
+  final Future<void> Function(Trip trip) onCreateTrip;
+  final Future<void> Function(Trip trip) onUpdateTrip;
+  final Future<void> Function(String tripId) onDeleteTrip;
 
   const TripsScreen({
     super.key,
@@ -42,7 +45,7 @@ class _TripsScreenState extends State<TripsScreen> {
     super.dispose();
   }
 
-  void _createTrip() {
+  Future<void> _createTrip() async {
     if (_nameController.text.isEmpty || _destController.text.isEmpty) return;
 
     final newTrip = Trip(
@@ -53,7 +56,7 @@ class _TripsScreenState extends State<TripsScreen> {
       expenses: [],
     );
 
-    widget.onCreateTrip(newTrip);
+    await widget.onCreateTrip(newTrip);
     _nameController.clear();
     _destController.clear();
     setState(() {
@@ -62,16 +65,16 @@ class _TripsScreenState extends State<TripsScreen> {
     });
   }
 
-  void _deletePlace(String placeId) {
+  Future<void> _deletePlace(String placeId) async {
     if (_activeTrip == null) return;
     final updatedTrip = _activeTrip!.copyWith(
       places: _activeTrip!.places.where((p) => p.id != placeId).toList(),
     );
-    widget.onUpdateTrip(updatedTrip);
+    await widget.onUpdateTrip(updatedTrip);
   }
 
-  void _addExpense(
-      String description, double amount, ExpenseCategory category) {
+  Future<void> _addExpense(
+      String description, double amount, ExpenseCategory category) async {
     if (_activeTrip == null) return;
     final expense = Expense(
       id: _uuid.v4(),
@@ -83,15 +86,15 @@ class _TripsScreenState extends State<TripsScreen> {
     final updatedTrip = _activeTrip!.copyWith(
       expenses: [expense, ..._activeTrip!.expenses],
     );
-    widget.onUpdateTrip(updatedTrip);
+    await widget.onUpdateTrip(updatedTrip);
   }
 
-  void _deleteExpense(String expenseId) {
+  Future<void> _deleteExpense(String expenseId) async {
     if (_activeTrip == null) return;
     final updatedTrip = _activeTrip!.copyWith(
       expenses: _activeTrip!.expenses.where((e) => e.id != expenseId).toList(),
     );
-    widget.onUpdateTrip(updatedTrip);
+    await widget.onUpdateTrip(updatedTrip);
   }
 
   void _showSelectSavedPlaceDialog(Trip trip) {
@@ -140,7 +143,7 @@ class _TripsScreenState extends State<TripsScreen> {
                               final updatedTrip = trip.copyWith(
                                 places: [...trip.places, place],
                               );
-                              widget.onUpdateTrip(updatedTrip);
+                              unawaited(widget.onUpdateTrip(updatedTrip));
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text('Added ${place.name} to trip'),

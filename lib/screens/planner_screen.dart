@@ -1,5 +1,11 @@
+import 'dart:async';
+
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
+
 import '../models/place.dart';
+import '../models/search_filters.dart';
+import '../screens/destination_detail_screen.dart';
 import '../services/gemini_service.dart';
 import '../widgets/place_card.dart';
 
@@ -8,6 +14,7 @@ class PlannerScreen extends StatefulWidget {
   final Set<String> bookmarkedIds;
   final void Function(Place place) onToggleBookmark;
   final void Function(Place place) onAddToTrip;
+  final String apiKey;
 
   const PlannerScreen({
     super.key,
@@ -15,6 +22,7 @@ class PlannerScreen extends StatefulWidget {
     required this.bookmarkedIds,
     required this.onToggleBookmark,
     required this.onAddToTrip,
+    required this.apiKey,
   });
 
   @override
@@ -23,10 +31,13 @@ class PlannerScreen extends StatefulWidget {
 
 class _PlannerScreenState extends State<PlannerScreen> {
   final _searchController = TextEditingController();
+  StreamSubscription<List<ConnectivityResult>>? _connSub;
   List<Place>? _places;
   String? _currentDestination;
   bool _isLoading = false;
   String? _error;
+  SearchFilters _filters = const SearchFilters();
+  bool _isOffline = false;
 
   static const _popularDestinations = [
     "Pokhara, Nepal",
@@ -44,9 +55,176 @@ class _PlannerScreenState extends State<PlannerScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _connSub = Connectivity().onConnectivityChanged.listen((results) =>
+        setState(() => _isOffline = results.contains(ConnectivityResult.none)));
+  }
+
+  @override
   void dispose() {
+    _connSub?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  Widget _buildChipGroup({
+    required String title,
+    required List<String> options,
+    required String? value,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: options
+              .map(
+                (opt) => ChoiceChip(
+                  label: Text(opt.toUpperCase()),
+                  selected: value == opt,
+                  onSelected: (selected) => onChanged(selected ? opt : null),
+                  selectedColor: Colors.teal.shade100,
+                ),
+              )
+              .toList(),
+        ),
+      ],
+    );
+  }
+
+  void _openFiltersSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        var temp = _filters;
+        return StatefulBuilder(
+          builder: (context, setModalState) => Padding(
+            padding: MediaQuery.of(context).viewInsets,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Filters',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          setState(() => _filters = const SearchFilters());
+                          Navigator.pop(context);
+                        },
+                        child: const Text('Clear'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _buildChipGroup(
+                    title: 'Travel Style',
+                    options: const [
+                      'budget',
+                      'adventure',
+                      'cultural',
+                      'luxury'
+                    ],
+                    value: temp.travelStyle,
+                    onChanged: (v) => setModalState(
+                      () => temp = temp.copyWith(travelStyle: v),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildChipGroup(
+                    title: 'Budget',
+                    options: const ['low', 'medium', 'high'],
+                    value: temp.budget,
+                    onChanged: (v) => setModalState(
+                      () => temp = temp.copyWith(budget: v),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildChipGroup(
+                    title: 'Season',
+                    options: const [
+                      'spring',
+                      'summer',
+                      'autumn',
+                      'winter',
+                      'monsoon'
+                    ],
+                    value: temp.season,
+                    onChanged: (v) => setModalState(
+                      () => temp = temp.copyWith(season: v),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildChipGroup(
+                    title: 'Crowd Level',
+                    options: const ['low', 'medium', 'high'],
+                    value: temp.crowdLevel,
+                    onChanged: (v) => setModalState(
+                      () => temp = temp.copyWith(crowdLevel: v),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Duration (days)',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      Text(temp.durationDays?.toString() ?? 'Any'),
+                    ],
+                  ),
+                  Slider(
+                    value: (temp.durationDays ?? 7).toDouble(),
+                    min: 1,
+                    max: 21,
+                    divisions: 20,
+                    label: '${temp.durationDays ?? 7} days',
+                    onChanged: (v) => setModalState(
+                      () => temp = temp.copyWith(durationDays: v.round()),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        setState(() => _filters = temp);
+                        Navigator.pop(context);
+                        if (_currentDestination != null) {
+                          _search();
+                        }
+                      },
+                      icon: const Icon(Icons.check),
+                      label: const Text('Apply Filters'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal.shade600,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _search() async {
@@ -59,7 +237,10 @@ class _PlannerScreenState extends State<PlannerScreen> {
     });
 
     try {
-      final places = await widget.geminiService.searchPlaces(destination);
+      final places = await widget.geminiService.searchPlaces(
+        destination,
+        filters: _filters,
+      );
       setState(() {
         _places = places;
         _currentDestination = destination;
@@ -79,6 +260,25 @@ class _PlannerScreenState extends State<PlannerScreen> {
     return SingleChildScrollView(
       child: Column(
         children: [
+          if (_isOffline)
+            Container(
+              width: double.infinity,
+              color: Colors.orange.shade100,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.wifi_off, color: Colors.orange.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'You are offline. Cached data is available; new searches will retry when online.',
+                      style: TextStyle(color: Colors.orange.shade900),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           // Hero search section
           Container(
             decoration: BoxDecoration(
@@ -236,6 +436,12 @@ class _PlannerScreenState extends State<PlannerScreen> {
                                       ),
                               ),
                             ),
+                            IconButton(
+                              onPressed: _openFiltersSheet,
+                              icon: const Icon(Icons.tune),
+                              color: Colors.white,
+                              tooltip: 'Filters',
+                            ),
                           ],
                         ),
                       ),
@@ -245,6 +451,48 @@ class _PlannerScreenState extends State<PlannerScreen> {
               ],
             ),
           ),
+
+          // Trending suggestions
+          if (_places == null && !_isLoading)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.trending_up, color: Colors.teal.shade600),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Trending destinations',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _popularDestinations
+                        .take(8)
+                        .map(
+                          (d) => ActionChip(
+                            label: Text(d),
+                            avatar: const Icon(Icons.flight, size: 18),
+                            onPressed: () {
+                              _searchController.text = d;
+                              _search();
+                            },
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ],
+              ),
+            ),
 
           // Error message
           if (_error != null)
@@ -294,6 +542,22 @@ class _PlannerScreenState extends State<PlannerScreen> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
+                      ),
+                      IconButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => DestinationDetailScreen(
+                                destination: _currentDestination!,
+                                apiKey: widget.apiKey,
+                              ),
+                            ),
+                          );
+                        },
+                        icon: Icon(Icons.info_outline,
+                            color: Colors.teal.shade600),
+                        tooltip: 'View destination details',
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(

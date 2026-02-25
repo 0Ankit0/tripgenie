@@ -1,34 +1,38 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
+
 import '../models/place.dart';
 import '../models/trip.dart';
+import '../providers.dart';
 import '../services/gemini_service.dart';
-import '../services/storage_service.dart';
+import '../state/auth_providers.dart';
+import '../state/data_providers.dart';
+import '../state/preferences_providers.dart';
+import '../models/travel_preferences.dart';
 import 'planner_screen.dart';
-import 'trips_screen.dart';
 import 'saved_screen.dart';
+import 'trips_screen.dart';
 
-class HomeScreen extends StatefulWidget {
-  final StorageService storageService;
+class HomeScreen extends ConsumerStatefulWidget {
   final String apiKey;
   final VoidCallback onLogout;
 
   const HomeScreen({
     super.key,
-    required this.storageService,
     required this.apiKey,
     required this.onLogout,
   });
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _currentIndex = 0;
   late GeminiService _geminiService;
-  late List<Place> _bookmarks;
-  late List<Trip> _trips;
 
   static const _uuid = Uuid();
 
@@ -36,53 +40,58 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _geminiService = GeminiService(widget.apiKey);
-    _bookmarks = widget.storageService.getBookmarks();
-    _trips = widget.storageService.getTrips();
   }
 
-  Set<String> get _bookmarkedIds => _bookmarks.map((p) => p.id).toSet();
+  Future<void> _toggleBookmark(Place place) async {
+    final uid = ref.read(userIdProvider);
+    if (uid == null) {
+      _showSnackBar('Signing you in, please try again.');
+      return;
+    }
 
-  void _toggleBookmark(Place place) {
-    setState(() {
-      final index = _bookmarks.indexWhere((p) => p.id == place.id);
-      if (index >= 0) {
-        _bookmarks.removeAt(index);
-        widget.storageService.removeBookmark(place.id);
-      } else {
-        _bookmarks.add(place);
-        widget.storageService.addBookmark(place);
-      }
-    });
+    final bookmarks = ref.read(bookmarksProvider(uid)).value ?? [];
+    final firestore = ref.read(firestoreServiceProvider);
+    final isBookmarked = bookmarks.any((p) => p.id == place.id);
+
+    if (isBookmarked) {
+      await firestore.deleteBookmark(uid, place.id);
+      _showSnackBar('Removed from saved');
+    } else {
+      await firestore.upsertBookmark(uid, place);
+      _showSnackBar('Saved ${place.name}');
+    }
   }
 
-  // Trip Management
-  void _createTrip(Trip trip) {
-    setState(() {
-      _trips.insert(0, trip);
-    });
-    widget.storageService.addTrip(trip);
+  Future<void> _createTrip(Trip trip) async {
+    final uid = ref.read(userIdProvider);
+    if (uid == null) {
+      _showSnackBar('Signing you in, please try again.');
+      return;
+    }
+    await ref.read(firestoreServiceProvider).upsertTrip(uid, trip);
+    _showSnackBar('Created ${trip.name}');
   }
 
-  void _updateTrip(Trip trip) {
-    setState(() {
-      final index = _trips.indexWhere((t) => t.id == trip.id);
-      if (index >= 0) {
-        _trips[index] = trip;
-      }
-    });
-    widget.storageService.updateTrip(trip);
+  Future<void> _updateTrip(Trip trip) async {
+    final uid = ref.read(userIdProvider);
+    if (uid == null) return;
+    await ref.read(firestoreServiceProvider).upsertTrip(uid, trip);
   }
 
-  void _deleteTrip(String tripId) {
-    setState(() {
-      _trips.removeWhere((t) => t.id == tripId);
-    });
-    widget.storageService.deleteTrip(tripId);
+  Future<void> _deleteTrip(String tripId) async {
+    final uid = ref.read(userIdProvider);
+    if (uid == null) return;
+    await ref.read(firestoreServiceProvider).deleteTrip(uid, tripId);
   }
 
-  void _addPlaceToTrip(Place place) {
-    if (_trips.isEmpty) {
-      // Auto-create a new trip
+  Future<void> _addPlaceToTrip(Place place, List<Trip> trips) async {
+    final uid = ref.read(userIdProvider);
+    if (uid == null) {
+      _showSnackBar('Signing you in, please try again.');
+      return;
+    }
+
+    if (trips.isEmpty) {
       final newTrip = Trip(
         id: _uuid.v4(),
         name: place.searchQuery.isNotEmpty ? place.searchQuery : 'My New Trip',
@@ -91,12 +100,12 @@ class _HomeScreenState extends State<HomeScreen> {
         places: [place],
         expenses: [],
       );
-      _createTrip(newTrip);
+      await _createTrip(newTrip);
       _showSnackBar(
-          'Created new trip "${newTrip.name}" and added ${place.name}!');
-    } else if (_trips.length == 1) {
-      // Add to the only trip
-      final trip = _trips[0];
+        'Created new trip "${newTrip.name}" and added ${place.name}!',
+      );
+    } else if (trips.length == 1) {
+      final trip = trips[0];
       if (trip.places.any((p) => p.id == place.id)) {
         _showSnackBar('${place.name} is already in ${trip.name}.');
         return;
@@ -104,15 +113,14 @@ class _HomeScreenState extends State<HomeScreen> {
       final updatedTrip = trip.copyWith(
         places: [...trip.places, place],
       );
-      _updateTrip(updatedTrip);
+      await _updateTrip(updatedTrip);
       _showSnackBar('Added ${place.name} to ${trip.name}.');
     } else {
-      // Show trip selection dialog
-      _showTripSelectionDialog(place);
+      _showTripSelectionDialog(place, trips);
     }
   }
 
-  void _showTripSelectionDialog(Place place) {
+  void _showTripSelectionDialog(Place place, List<Trip> trips) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -126,34 +134,34 @@ class _HomeScreenState extends State<HomeScreen> {
               style: TextStyle(color: Colors.grey.shade600),
             ),
             const SizedBox(height: 16),
-            ...(_trips.map((trip) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.teal.shade100,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child:
-                        Icon(Icons.work_outline, color: Colors.teal.shade600),
+            ...trips.map(
+              (trip) => ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.shade100,
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  title: Text(trip.name),
-                  subtitle: Text(trip.destination),
-                  trailing: const Icon(Icons.add),
-                  onTap: () {
-                    Navigator.pop(context);
-                    if (trip.places.any((p) => p.id == place.id)) {
-                      _showSnackBar(
-                          '${place.name} is already in ${trip.name}.');
-                      return;
-                    }
-                    final updatedTrip = trip.copyWith(
-                      places: [...trip.places, place],
-                    );
-                    _updateTrip(updatedTrip);
-                    _showSnackBar('Added ${place.name} to ${trip.name}.');
-                  },
-                ))),
+                  child: Icon(Icons.work_outline, color: Colors.teal.shade600),
+                ),
+                title: Text(trip.name),
+                subtitle: Text(trip.destination),
+                trailing: const Icon(Icons.add),
+                onTap: () async {
+                  Navigator.pop(context);
+                  if (trip.places.any((p) => p.id == place.id)) {
+                    _showSnackBar('${place.name} is already in ${trip.name}.');
+                    return;
+                  }
+                  final updatedTrip = trip.copyWith(
+                    places: [...trip.places, place],
+                  );
+                  await _updateTrip(updatedTrip);
+                  _showSnackBar('Added ${place.name} to ${trip.name}.');
+                },
+              ),
+            ),
           ],
         ),
         actions: [
@@ -186,9 +194,16 @@ class _HomeScreenState extends State<HomeScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'API Key: ${widget.apiKey.substring(0, 8)}...',
+              'API Key: ${widget.apiKey.substring(0, math.min(widget.apiKey.length, 8))}...',
               style: const TextStyle(fontFamily: 'monospace'),
             ),
+            const SizedBox(height: 12),
+            const Text(
+              'Travel style',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            _buildTravelStyleChips(),
           ],
         ),
         actions: [
@@ -206,6 +221,30 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTravelStyleChips() {
+    final prefs = ref.watch(travelPreferencesProvider).value;
+    final current = prefs?.travelStyle;
+    const options = ['budget', 'adventure', 'cultural', 'luxury'];
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: options
+          .map(
+            (opt) => ChoiceChip(
+              label: Text(opt.toUpperCase()),
+              selected: current == opt,
+              onSelected: (selected) async {
+                final updater = ref.read(updatePreferencesProvider);
+                await updater(
+                    TravelPreferences(travelStyle: selected ? opt : null));
+              },
+              selectedColor: Colors.teal.shade100,
+            ),
+          )
+          .toList(),
     );
   }
 
@@ -237,6 +276,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final uid = ref.watch(userIdProvider);
+    final bookmarksAsync = ref.watch(bookmarksProvider(uid));
+    final tripsAsync = ref.watch(tripsProvider(uid));
+
+    final bookmarks = bookmarksAsync.value ?? <Place>[];
+    final trips = tripsAsync.value ?? <Trip>[];
+    final bookmarkedIds = bookmarks.map((p) => p.id).toSet();
+    final isSyncing = bookmarksAsync.isLoading || tripsAsync.isLoading;
+
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
@@ -274,27 +322,43 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: IndexedStack(
-        index: _currentIndex,
+      body: Stack(
         children: [
-          PlannerScreen(
-            geminiService: _geminiService,
-            bookmarkedIds: _bookmarkedIds,
-            onToggleBookmark: _toggleBookmark,
-            onAddToTrip: _addPlaceToTrip,
+          IndexedStack(
+            index: _currentIndex,
+            children: [
+              PlannerScreen(
+                geminiService: _geminiService,
+                bookmarkedIds: bookmarkedIds,
+                onToggleBookmark: _toggleBookmark,
+                onAddToTrip: (place) => _addPlaceToTrip(place, trips),
+                apiKey: widget.apiKey,
+              ),
+              TripsScreen(
+                trips: trips,
+                bookmarks: bookmarks,
+                onCreateTrip: _createTrip,
+                onUpdateTrip: _updateTrip,
+                onDeleteTrip: _deleteTrip,
+              ),
+              SavedScreen(
+                bookmarks: bookmarks,
+                onToggleBookmark: _toggleBookmark,
+                onAddToTrip: (place) => _addPlaceToTrip(place, trips),
+              ),
+            ],
           ),
-          TripsScreen(
-            trips: _trips,
-            bookmarks: _bookmarks,
-            onCreateTrip: _createTrip,
-            onUpdateTrip: _updateTrip,
-            onDeleteTrip: _deleteTrip,
-          ),
-          SavedScreen(
-            bookmarks: _bookmarks,
-            onToggleBookmark: _toggleBookmark,
-            onAddToTrip: _addPlaceToTrip,
-          ),
+          if (isSyncing)
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              child: LinearProgressIndicator(
+                minHeight: 2,
+                backgroundColor: Colors.transparent,
+                color: Colors.teal.shade400,
+              ),
+            ),
         ],
       ),
       bottomNavigationBar: Container(
@@ -327,7 +391,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 clipBehavior: Clip.none,
                 children: [
                   const Icon(Icons.work_outline),
-                  if (_trips.isNotEmpty)
+                  if (trips.isNotEmpty)
                     Positioned(
                       right: -8,
                       top: -4,
@@ -338,7 +402,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           shape: BoxShape.circle,
                         ),
                         child: Text(
-                          '${_trips.length}',
+                          '${trips.length}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 10,
@@ -353,7 +417,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 clipBehavior: Clip.none,
                 children: [
                   const Icon(Icons.work),
-                  if (_trips.isNotEmpty)
+                  if (trips.isNotEmpty)
                     Positioned(
                       right: -8,
                       top: -4,
@@ -364,7 +428,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           shape: BoxShape.circle,
                         ),
                         child: Text(
-                          '${_trips.length}',
+                          '${trips.length}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 10,
@@ -382,7 +446,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 clipBehavior: Clip.none,
                 children: [
                   const Icon(Icons.bookmark_border),
-                  if (_bookmarks.isNotEmpty)
+                  if (bookmarks.isNotEmpty)
                     Positioned(
                       right: -8,
                       top: -4,
@@ -393,7 +457,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           shape: BoxShape.circle,
                         ),
                         child: Text(
-                          '${_bookmarks.length}',
+                          '${bookmarks.length}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 10,
@@ -408,7 +472,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 clipBehavior: Clip.none,
                 children: [
                   const Icon(Icons.bookmark),
-                  if (_bookmarks.isNotEmpty)
+                  if (bookmarks.isNotEmpty)
                     Positioned(
                       right: -8,
                       top: -4,
@@ -419,7 +483,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           shape: BoxShape.circle,
                         ),
                         child: Text(
-                          '${_bookmarks.length}',
+                          '${bookmarks.length}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 10,
